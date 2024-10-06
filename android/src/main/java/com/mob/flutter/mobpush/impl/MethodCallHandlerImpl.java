@@ -1,4 +1,4 @@
-package com.mob.mobpush_plugin;
+package com.mob.flutter.mobpush.impl;
 
 import android.content.Context;
 
@@ -6,16 +6,18 @@ import androidx.annotation.NonNull;
 
 import com.mob.MobSDK;
 import com.mob.OperationCallback;
-import com.mob.mobpush_plugin.req.SimulateRequest;
+import com.mob.flutter.mobpush.impl.req.SimulateRequest;
 import com.mob.pushsdk.MobPush;
 import com.mob.pushsdk.MobPushCallback;
 import com.mob.pushsdk.MobPushCustomMessage;
 import com.mob.pushsdk.MobPushLocalNotification;
 import com.mob.pushsdk.MobPushNotifyMessage;
 import com.mob.pushsdk.MobPushReceiver;
+import com.mob.tools.MobLog;
 import com.mob.tools.utils.Hashon;
 import com.mob.tools.utils.ResHelper;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -23,9 +25,8 @@ import java.util.HashMap;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
-public class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
-    private static Hashon hashon = new Hashon();
-    private static MobPushReceiver mobPushReceiver;
+public class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler, MobPushReceiver {
+    private static final Hashon hashon = new Hashon();
     private OnRemoveReceiverListener removeReceiverListener;
     private static ArrayList<MethodChannel.Result> setAliasCallback = new ArrayList<>();
     private static ArrayList<MethodChannel.Result> getAliasCallback = new ArrayList<>();
@@ -35,11 +36,6 @@ public class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
     private static ArrayList<MethodChannel.Result> deleteTagsCallback = new ArrayList<>();
     private static ArrayList<MethodChannel.Result> cleanTagsCallback = new ArrayList<>();
 
-    public MethodCallHandlerImpl() {
-        createMobPushReceiver();
-        MobPush.addPushReceiver(mobPushReceiver);
-    }
-
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull final MethodChannel.Result result) {
         try {
@@ -47,7 +43,7 @@ public class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
             if (call.method.equals("getPlatformVersion")) {
                 result.success("Android " + android.os.Build.VERSION.RELEASE);
             } else if (call.method.equals("getSDKVersion")) {
-                result.success(MobPush.SDK_VERSION_NAME);
+                result.success(getMobPushSdkVersion());
             } else if (call.method.equals("getRegistrationId")) {
                 MobPush.getRegistrationId(new MobPushCallback<String>() {
                     @Override
@@ -175,99 +171,112 @@ public class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
         }
     }
 
-    private static void createMobPushReceiver() {
-        mobPushReceiver = new MobPushReceiver() {
-            @Override
-            public void onCustomMessageReceive(Context context, MobPushCustomMessage mobPushCustomMessage) {
-
-            }
-
-            @Override
-            public void onNotifyMessageReceive(Context context, MobPushNotifyMessage mobPushNotifyMessage) {
-
-            }
-
-            @Override
-            public void onNotifyMessageOpenedReceive(Context context, MobPushNotifyMessage mobPushNotifyMessage) {
-
-            }
-
-            @Override
-            public void onTagsCallback(Context context, String[] tags, int operation, int errorCode) {
-                try {
-                    HashMap<String, Object> map = new HashMap<String, Object>();
-                    MethodChannel.Result result = null;
-                    // 0 获取， 1 设置， 2 删除，3 清空
-                    switch (operation) {
-                        case 0:
-                            result = getTagsCallback.remove(0);
-                            map.put("res", tags == null ? new ArrayList<String>() : Arrays.asList(tags));
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                        case 1:
-                            result = addTagsCallback.remove(0);
-                            map.put("res", errorCode == 0 ? "success" : "failed");
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                        case 2:
-                            result = deleteTagsCallback.remove(0);
-                            map.put("res", errorCode == 0 ? "success" : "failed");
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                        case 3:
-                            result = cleanTagsCallback.remove(0);
-                            map.put("res", errorCode == 0 ? "success" : "failed");
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                    }
-                    if (result != null) {
-                        result.success(map);
-                    }
-                } catch (Exception e) {
-                }
-            }
-
-            @Override
-            public void onAliasCallback(Context context, String alias, int operation, int errorCode) {
-                try {
-                    HashMap<String, Object> map = new HashMap<String, Object>();
-                    MethodChannel.Result result = null;
-                    // 0 获取， 1 设置， 2 删除
-                    switch (operation) {
-                        case 0:
-                            result = getAliasCallback.remove(0);
-                            map.put("res", alias);
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                        case 1:
-                            result = setAliasCallback.remove(0);
-                            map.put("res", errorCode == 0 ? "success" : "failed");
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                        case 2:
-                            result = deleteAliasCallback.remove(0);
-                            map.put("res", errorCode == 0 ? "success" : "failed");
-                            map.put("error", "");
-                            map.put("errorCode", String.valueOf(errorCode));
-                            break;
-                    }
-                    if (result != null) {
-                        result.success(map);
-                    }
-                } catch (Exception e) {
-
-                }
-            }
-        };
-    }
-
     public void setRemoveReceiverListener(OnRemoveReceiverListener removeReceiverListener) {
         this.removeReceiverListener = removeReceiverListener;
+    }
+
+	private String getMobPushSdkVersion() {
+		try {
+			Class<?> mobpushClass = MobPush.class;
+			Field versionField = mobpushClass.getDeclaredField("SDK_VERSION_NAME");
+			if (!versionField.isAccessible()) {
+				versionField.setAccessible(true);
+			}
+			return (String) versionField.get(mobpushClass);
+		} catch (Throwable e) {
+			e.printStackTrace();
+		}
+		return MobPush.SDK_VERSION_NAME;
+	}
+
+    @Override
+    public void onCustomMessageReceive(Context context, MobPushCustomMessage mobPushCustomMessage) {
+
+    }
+
+    @Override
+    public void onNotifyMessageReceive(Context context, MobPushNotifyMessage mobPushNotifyMessage) {
+
+    }
+
+    @Override
+    public void onNotifyMessageOpenedReceive(Context context, MobPushNotifyMessage mobPushNotifyMessage) {
+
+    }
+
+    @Override
+    public void onTagsCallback(Context context, String[] tags, int operation, int errorCode) {
+        try {
+            HashMap<String, Object> map = new HashMap<>();
+            MethodChannel.Result result = null;
+            // 0 获取， 1 设置， 2 删除，3 清空
+            switch (operation) {
+                case 0:
+                    result = getTagsCallback.remove(0);
+                    map.put("res", tags == null ? new ArrayList<String>() : Arrays.asList(tags));
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+                case 1:
+                    result = addTagsCallback.remove(0);
+                    map.put("res", errorCode == 0 ? "success" : "failed");
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+                case 2:
+                    result = deleteTagsCallback.remove(0);
+                    map.put("res", errorCode == 0 ? "success" : "failed");
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+                case 3:
+                    result = cleanTagsCallback.remove(0);
+                    map.put("res", errorCode == 0 ? "success" : "failed");
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+            }
+            if (result != null) {
+                MobLog.getInstance().i("tag result success");
+                result.success(map);
+            }
+        } catch (Throwable e) {
+            MobLog.getInstance().e(e);
+        }
+    }
+
+    @Override
+    public void onAliasCallback(Context context, String alias, int operation, int errorCode) {
+        try {
+            HashMap<String, Object> map = new HashMap<>();
+            MethodChannel.Result result = null;
+            // 0 获取， 1 设置， 2 删除
+            switch (operation) {
+                case 0:
+                    result = getAliasCallback.remove(0);
+                    map.put("res", alias);
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+                case 1:
+                    result = setAliasCallback.remove(0);
+                    map.put("res", errorCode == 0 ? "success" : "failed");
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+                case 2:
+                    result = deleteAliasCallback.remove(0);
+                    map.put("res", errorCode == 0 ? "success" : "failed");
+                    map.put("error", "");
+                    map.put("errorCode", String.valueOf(errorCode));
+                    break;
+            }
+            if (result != null) {
+                MobLog.getInstance().i("alias result success");
+                result.success(map);
+            }
+        } catch (Throwable e) {
+            MobLog.getInstance().e(e);
+        }
     }
 }

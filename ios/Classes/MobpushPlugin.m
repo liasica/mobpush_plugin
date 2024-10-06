@@ -4,7 +4,6 @@
 #import <MobPush/MPushNotificationConfiguration.h>
 #import <MOBFoundation/MOBFoundation.h>
 #import <MOBFoundation/MobSDK+Privacy.h>
-#import <MOBFoundation/MobSDK.h>
 
 @interface MobpushPlugin()<FlutterStreamHandler>
 // 是否是生产环境
@@ -18,10 +17,11 @@
 
 @implementation MobpushPlugin
 
-static NSString *const receiverStr = @"mobpush_receiver";
+static NSString *const receiverStr = @"com.mob.mobpush.reciever";
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
-    FlutterMethodChannel* channel = [FlutterMethodChannel methodChannelWithName:@"mob.com/mobpush_plugin" binaryMessenger:[registrar messenger]];
+    // 标准: MethodChannel 统一命名：com.mob.项目xx.功能
+    FlutterMethodChannel* channel = [FlutterMethodChannel methodChannelWithName:@"com.mob.mobpush.methodChannel" binaryMessenger:[registrar messenger]];
     MobpushPlugin* instance = [[MobpushPlugin alloc] init];
     [registrar addMethodCallDelegate:instance channel:channel];
     
@@ -299,7 +299,9 @@ static NSString *const receiverStr = @"mobpush_receiver";
     {
         MPushNotificationConfiguration *config = [[MPushNotificationConfiguration alloc] init];
         config.types = MPushAuthorizationOptionsSound | MPushAuthorizationOptionsBadge | MPushAuthorizationOptionsAlert;
-        [[MOBFDataService sharedInstance] setCacheData:config forKey:@"MPushNotificationConfiguration" domain:@"MOBPUSH_FLUTTER_PLUGIN"];
+        [[MOBFDataService sharedInstance] setCacheData:config
+                                                 forKey:@"MPushNotificationConfiguration"
+                                                 domain:@"MOBPUSH_FLUTTER_PLUGIN"];
         [MobPush setupNotification:config];
     }
     else if ([@"updatePrivacyPermissionStatus" isEqualToString:call.method])
